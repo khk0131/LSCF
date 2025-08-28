@@ -1,24 +1,27 @@
 from scipy.linalg import eigh
 import numpy as np
 import jax.numpy as jnp
-from pyscf import gto
+from pyscf import gto, dft
 from constant import ANGSTROM_TO_BOHR
 
 class SCFInitGuess:
     core_hamiltonian: jnp.array
     overlap_matrix: jnp.array
+    orthogonalization_matrix: jnp.array
     electron_repulsion_matrix: jnp.array
+    nuclear_energy: jnp.float64
     mol: gto.Mole
 
     def __init__(self):
         pass
     
-    def get_initial_density(self, H_core, S, n_electrons):
+    def get_initial_density(self, n_electrons):
         """ Get initial density matrix from core hamiltonian and overlap matrix
         """
-        eigvals, eigvecs = eigh(S)
+        eigvals, eigvecs = eigh(self.overlap_matrix) 
+        self.orthogonalization_matrix = eigvecs @ np.diag(1.0 / np.sqrt(eigvals))
         S_inv_sqrt = eigvecs @ np.diag(1.0 / np.sqrt(eigvals)) @ eigvecs.T
-        H_ortho = S_inv_sqrt.T @ H_core @ S_inv_sqrt
+        H_ortho = S_inv_sqrt.T @ self.core_hamiltonian @ S_inv_sqrt
         
         eps, C_ortho = eigh(H_ortho)
         C = S_inv_sqrt @ C_ortho
@@ -28,23 +31,25 @@ class SCFInitGuess:
 
         return P
 
-    def get_h_core_and_s(self, mol_name='h2', basis='sto-3g', num_basis=4):
-        """ Get initial core hamiltonian and overlap matrix 
-            TODO: H_core and S should be calculated according to mol and basis
+    def get_core_hamiltonian(self):
+        """ Get core hamiltonian matrix 
         """
-        self.set_mol(mol_name, basis)
-        H_core = np.random.rand(num_basis, num_basis)
-        S = np.eye(num_basis)
-        self.core_hamiltonian = H_core
-        self.overlap_matrix = S
+        return self.core_hamiltonian
 
-        return self.core_hamiltonian, self.overlap_matrix
+    def get_overlap_matrix(self):
+        """ Get overlap matrix
+        """
+        return self.overlap_matrix
 
     def get_electron_repulsion_matrix(self):
         """ Get electron repulsion matrix
         """
-        J = self.mol.intor('int2e') # coulomb replusion
-        return J
+        return self.electron_repulsion_matrix
+
+    def get_nuclear_energy(self):
+        """ Get nuclear energy
+        """
+        return self.nuclear_energy
 
     def set_mol(self, mol_name, basis):
         """ Set molecular information with gto.M method
@@ -58,6 +63,11 @@ class SCFInitGuess:
             basis=basis,
             unit='Bohr'
         )
+        mf = dft.RKS(self.mol)
+        self.core_hamiltonian = mf.get_hcore()
+        self.overlap_matrix = self.mol.intor('int1e_ovlp')
+        self.electron_repulsion_matrix = self.mol.intor('int2e')
+        self.nuclear_energy = self.mol.energy_nuc()
         
 
 

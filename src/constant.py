@@ -1,2 +1,3 @@
+# constant value used for SCF calc
 BOHR_TO_ANGSTROM = 0.52917721092
 ANGSTROM_TO_BOHR = 1 / BOHR_TO_ANGSTROM
